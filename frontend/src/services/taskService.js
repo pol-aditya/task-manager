@@ -1,7 +1,16 @@
+
+
 const API_URL = "http://127.0.0.1:8000";
 
+const authHeaders = () => ({
+  Authorization: `Bearer ${localStorage.getItem("token")}`,
+});
+
+
 export const getTasks = async () => {
-  const response = await fetch(`${API_URL}/tasks`);
+  const response = await fetch(`${API_URL}/tasks`, {
+    headers: authHeaders(),
+  });
 
   if (!response.ok) {
     throw new Error("Failed to fetch tasks");
@@ -15,6 +24,7 @@ export const createTask = async (title) => {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders(),
     },
     body: JSON.stringify({ title }),
   });
@@ -31,6 +41,7 @@ export const updateTask = async (id, title) => {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders(),
     },
     body: JSON.stringify({ title }),
   });
@@ -42,9 +53,11 @@ export const updateTask = async (id, title) => {
   return response.json();
 };
 
+
 export const deleteTask = async (id) => {
   const response = await fetch(`${API_URL}/tasks/${id}`, {
     method: "DELETE",
+    headers: authHeaders(),
   });
 
   if (!response.ok) {

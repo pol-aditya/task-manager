@@ -6,7 +6,7 @@
 # from models import Task
 
 # app = FastAPI()
-
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -18,6 +18,9 @@ from models import Task
 from models import Task, User
 from auth import hash_password, verify_password, create_access_token
 from schemas import UserCreate, UserLogin
+
+from auth import get_current_user
+
 
 app = FastAPI()
 
@@ -38,30 +41,37 @@ Base.metadata.create_all(bind=engine)
 
 
 @app.post("/login")
-def login(user: UserLogin, db: Session = Depends(get_db)):
-
+def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
     existing_user = (
         db.query(User)
-        .filter(User.email == user.email)
+        .filter(User.email == form_data.username)
         .first()
     )
 
     if not existing_user:
-        return {"message": "Invalid email or password"}
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password"
+        )
 
     if not verify_password(
-        user.password,
+        form_data.password,
         existing_user.password_hash
     ):
-        return {"message": "Invalid email or password"}
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password"
+        )
 
     access_token = create_access_token(existing_user.id)
 
     return {
         "access_token": access_token,
         "token_type": "bearer"
-    }
-    
+    }    
         
 
 @app.post("/register")
@@ -104,18 +114,32 @@ def home():
     return {"message": "Task Manager API"}
 
 
+# @app.get("/tasks")
+# def get_tasks(db: Session = Depends(get_db)):
+#     tasks = db.query(Task).all()
+#     return tasks    
 @app.get("/tasks")
-def get_tasks(db: Session = Depends(get_db)):
-    tasks = db.query(Task).all()
-    return tasks    
+def get_tasks(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return (
+        db.query(Task)
+        .filter(Task.user_id == current_user.id)
+        .all()
+    )
 
 
 @app.post("/tasks")
 def create_task(
     task: TaskCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    new_task = Task(title=task.title)
+    new_task = Task(
+        title=task.title,
+        user_id=current_user.id
+    )
 
     db.add(new_task)
     db.commit()
@@ -129,34 +153,55 @@ def create_task(
 @app.put("/tasks/{task_id}")
 def update_task(
     task_id: int,
-    task_data: TaskCreate,
-    db: Session = Depends(get_db)
+    task: TaskCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    task = db.query(Task).filter(Task.id == task_id).first()
+    db_task = (
+        db.query(Task)
+        .filter(
+            Task.id == task_id,
+            Task.user_id == current_user.id
+        )
+        .first()
+    )
 
-    if task is None:
-        return {"message": "Task not found"}
+    if not db_task:
+        raise HTTPException(
+            status_code=404,
+            detail="Task not found or not yours"
+        )
 
-    task.title = task_data.title
-
+    db_task.title = task.title
     db.commit()
-    db.refresh(task)
+    db.refresh(db_task)
 
-    return task
+    return db_task
 
 
 # delete task -- delete
 @app.delete("/tasks/{task_id}")
 def delete_task(
     task_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    task = db.query(Task).filter(Task.id == task_id).first()
+    db_task = (
+        db.query(Task)
+        .filter(
+            Task.id == task_id,
+            Task.user_id == current_user.id
+        )
+        .first()
+    )
 
-    if task is None:
-        return {"message": "Task not found"}
+    if not db_task:
+        raise HTTPException(
+            status_code=404,
+            detail="Task not found or not yours"
+        )
 
-    db.delete(task)
+    db.delete(db_task)
     db.commit()
 
     return {"message": "Task deleted"}

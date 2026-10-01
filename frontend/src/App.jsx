@@ -1,74 +1,77 @@
-import { useEffect, useState } from "react";
-
-import TaskForm from "./components/TaskForm";
-import TaskList from "./components/TaskList";
-
+import { useState } from "react";
 import {
-  getTasks,
-  createTask,
-  deleteTask,
-  updateTask,
-} from "./services/taskService";
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
+
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
+import TasksPage from "./pages/TasksPage";
+
+import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
-  const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [loggedIn, setLoggedIn] = useState(
+    !!localStorage.getItem("token")
+  );
 
-  useEffect(() => {
-    loadTasks();
-  }, []);
-
-  const loadTasks = async () => {
-    try {
-      const data = await getTasks();
-      setTasks(data);
-    } catch (error) {
-      setError(error.message);
-    } finally {
-      setLoading(false);
-    }
+  const handleLogin = () => {
+    setLoggedIn(true);
   };
 
-  const handleTaskCreated = async (title) => {
-    const newTask = await createTask(title);
-    setTasks([...tasks, newTask]);
-  };
-
-  const handleUpdate = async (id, title) => {
-    const updatedTask = await updateTask(id, title);
-
-    setTasks((currentTasks) =>
-      currentTasks.map((task) =>
-        task.id === id ? updatedTask : task
-      )
-    );
-  };
-
-  const handleDelete = async (id) => {
-    await deleteTask(id);
-
-    setTasks(tasks.filter((task) => task.id !== id));
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    setLoggedIn(false);
   };
 
   return (
-    <div>
-      <h1>Task Manager</h1>
+    <BrowserRouter>
+      <Routes>
 
-      <TaskForm onTaskCreated={handleTaskCreated} />
-
-      {loading && <p>Loading...</p>}
-
-      {error && <p>{error}</p>}
-
-      {!loading && !error && (
-        <TaskList
-          tasks={tasks}
-          onDelete={handleDelete}
-          onUpdate={handleUpdate}
+        {/* Login */}
+        <Route
+          path="/login"
+          element={
+            loggedIn ? (
+              <Navigate to="/tasks" replace />
+            ) : (
+              <LoginPage onLogin={handleLogin} />
+            )
+          }
         />
-      )}
-    </div>
+
+        {/* Register */}
+        <Route
+          path="/register"
+          element={
+            loggedIn ? (
+              <Navigate to="/tasks" replace />
+            ) : (
+              <RegisterPage />
+            )
+          }
+        />
+
+        {/* Protected Tasks */}
+        <Route
+          path="/tasks"
+          element={
+            <ProtectedRoute>
+              <TasksPage onLogout={handleLogout} />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Unknown URL */}
+        <Route
+          path="*"
+          element={<Navigate to="/tasks" replace />}
+        />
+
+      </Routes>
+    </BrowserRouter>
   );
 }
 
